@@ -1,169 +1,106 @@
 import streamlit as st
-import pandas as pd
-from datetime import datetime, timedelta
-import requests
-import io
+from datetime import datetime
 
-st.set_page_config(page_title="Suivi CNC", layout="wide", page_icon="🔧")
+st.set_page_config(page_title="Tâches du jour", layout="centered")
 
-# --- CSS Custom ---
+# --- CSS simple ---
 st.markdown("""
 <style>
-   .stButton > button {
-        border-radius: 8px;
-        background-color: #c70000;
-        color: white;
-        border: none;
-    }
-   .stButton > button:hover {
-        background-color: #a00000;
-        color: white;
-    }
-    h1 { color: #c70000; text-align: center; }
-   .stExpander { border: 1px solid #ddd; border-radius: 10px; }
+  .stButton > button {border-radius: 8px; width: 100%;}
+    h1 {text-align: center; color: #2c3e50;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Init session ---
+# --- Init ---
 if 'taches' not in st.session_state:
     st.session_state.taches = []
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'role' not in st.session_state:
     st.session_state.role = None
-if 'users' not in st.session_state:
-    st.session_state.users = {"patron": "admin", "personnel": "1234"}
 
-# --- Fonctions ---
+# --- Login ---
 def login():
-    st.title("🔧 Connexion Suivi CNC")
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        user = st.text_input("Utilisateur")
-        pwd = st.text_input("Mot de passe", type="password")
-        if st.button("Se connecter", use_container_width=True):
-            if user in st.session_state.users and st.session_state.users[user] == pwd:
-                st.session_state.logged_in = True
-                st.session_state.role = user
-                st.rerun()
-            else:
-                st.error("Identifiants incorrects")
+    st.title("Connexion")
+    user = st.text_input("Nom")
+    pwd = st.text_input("Mot de passe", type="password")
+    if st.button("Entrer"):
+        if user == "patron" and pwd == "admin":
+            st.session_state.logged_in = True
+            st.session_state.role = "patron"
+            st.rerun()
+        elif user == "moi" and pwd == "1234":
+            st.session_state.logged_in = True
+            st.session_state.role = "moi"
+            st.rerun()
+        else:
+            st.error("Mauvais identifiants")
 
-def export_csv(df):
-    return df.to_csv(index=False).encode('utf-8')
+# --- App ---
+def app():
+    st.title("📋 Tâches quotidiennes")
 
-def filtrer_taches(df, periode):
-    if df.empty: return df
-    df['cree_le'] = pd.to_datetime(df['cree_le'])
-    today = datetime.now().date()
-    if periode == "Jour":
-        return df[df['cree_le'].dt.date == today]
-    elif periode == "Semaine":
-        debut_semaine = today - timedelta(days=today.weekday())
-        return df[df['cree_le'].dt.date >= debut_semaine]
-    elif periode == "Mois":
-        return df[df['cree_le'].dt.month == today.month]
-    return df
-
-# --- App principale ---
-def main_app():
-    st.title("Suivi des Tâches CNC")
-
-    # Sidebar
     with st.sidebar:
-        st.subheader(f"Connecté : {st.session_state.role}")
-
-        st.divider()
-        st.subheader("🌤️ Météo Antananarivo")
-        try:
-            data = requests.get("https://wttr.in/Antananarivo?format=j1", timeout=3).json()
-            current = data['current_condition'][0]
-            st.metric("Température", f"{current['temp_C']}°C")
-            st.caption(current['weatherDesc'][0]['value'])
-        except:
-            st.info("Météo indisponible")
-
-        st.divider()
-        if st.session_state.role == "patron":
-            with st.expander("⚙️ Changer mot de passe"):
-                new_pwd = st.text_input("Nouveau mdp", type="password", key="newpwd")
-                if st.button("Valider"):
-                    st.session_state.users['patron'] = new_pwd
-                    st.success("Mot de passe changé")
-
-        if st.button("Déconnexion", use_container_width=True):
+        st.write(f"Connecté : **{st.session_state.role}**")
+        if st.button("Déconnexion"):
             st.session_state.logged_in = False
             st.rerun()
 
-    # Patron : ajout tâches
+    # PATRON : ajoute des tâches
     if st.session_state.role == "patron":
-        with st.expander("➕ Ajouter une tâche", expanded=True):
-            titre = st.text_input("Intitulé de la tâche")
-            if st.button("Ajouter la tâche", use_container_width=True):
-                if titre:
-                    st.session_state.taches.append({
-                        "titre": titre,
-                        "cree_le": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "valide": False,
-                        "valide_le": None
-                    })
-                    st.success(f"Tâche '{titre}' ajoutée")
-                    st.rerun()
+        st.subheader("Ajouter une tâche")
+        nouvelle_tache = st.text_input("Que faut-il faire aujourd'hui?")
+        if st.button("Ajouter"):
+            if nouvelle_tache:
+                st.session_state.taches.append({
+                    "tache": nouvelle_tache,
+                    "fini_par_moi": False,
+                    "valide_patron": False,
+                    "date": datetime.now().strftime("%d/%m %H:%M")
+                })
+                st.rerun()
 
-    # Filtres + Export
-    st.subheader("Liste des tâches")
-    col1, col2, col3 = st.columns([2,2,2])
-    with col1:
-        filtre_periode = st.selectbox("Période", ["Tout", "Jour", "Semaine", "Mois"])
-    with col2:
-        filtre_statut = st.selectbox("Statut", ["Toutes", "À faire", "Validées"])
+    # LISTE DES TÂCHES
+    st.subheader("Liste du jour")
 
-    df = pd.DataFrame(st.session_state.taches)
-    if not df.empty:
-        df_filtre = filtrer_taches(df, filtre_periode)
-        if filtre_statut == "À faire":
-            df_filtre = df_filtre[df_filtre['valide'] == False]
-        elif filtre_statut == "Validées":
-            df_filtre = df_filtre[df_filtre['valide'] == True]
+    if not st.session_state.taches:
+        st.info("Aucune tâche pour l'instant")
     else:
-        df_filtre = df
+        for i, t in enumerate(st.session_state.taches):
+            col1, col2, col3 = st.columns([3,1,1])
 
-    with col3:
-        st.download_button(
-            "📥 Export CSV",
-            export_csv(df_filtre),
-            f"taches_cnc_{datetime.now().date()}.csv",
-            "text/csv",
-            use_container_width=True
-        )
-
-    # Affichage tâches
-    if not df_filtre.empty:
-        for i, tache in df_filtre.iterrows():
-            col1, col2 = st.columns([5,1])
             with col1:
-                if tache['valide']:
-                    st.success(f"✅ **{tache['titre']}** \nValidé le {tache['valide_le']} | Créé le {tache['cree_le']}")
+                if t['valide_patron']:
+                    st.success(f"✅ {t['tache']} - Validé")
+                elif t['fini_par_moi']:
+                    st.warning(f"⏳ {t['tache']} - En attente validation")
                 else:
-                    st.warning(f"⏳ **{tache['titre']}** \nCréé le {tache['cree_le']}")
+                    st.write(f"🔲 {t['tache']} - À faire")
+                st.caption(f"Ajouté le {t['date']}")
+
             with col2:
-                if st.session_state.role == "personnel" and not tache['valide']:
-                    if st.button("Valider", key=f"val_{i}", use_container_width=True):
-                        idx_original = df[df['titre'] == tache['titre']].index[0]
-                        st.session_state.taches[idx_original]['valide'] = True
-                        st.session_state.taches[idx_original]['valide_le'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                # TOI : tu coches quand t'as fini
+                if st.session_state.role == "moi" and not t['fini_par_moi']:
+                    if st.button("J'ai fini", key=f"fini_{i}"):
+                        st.session_state.taches[i]['fini_par_moi'] = True
                         st.rerun()
+
+            with col3:
+                # PATRON : il valide
+                if st.session_state.role == "patron" and t['fini_par_moi'] and not t['valide_patron']:
+                    if st.button("Valider", key=f"val_{i}"):
+                        st.session_state.taches[i]['valide_patron'] = True
+                        st.rerun()
+
+                # PATRON : il peut supprimer
                 if st.session_state.role == "patron":
                     if st.button("🗑️", key=f"del_{i}"):
-                        idx_original = df[df['titre'] == tache['titre']].index[0]
-                        st.session_state.taches.pop(idx_original)
+                        st.session_state.taches.pop(i)
                         st.rerun()
             st.divider()
-    else:
-        st.info("Aucune tâche pour les filtres sélectionnés")
 
 # --- Run ---
 if not st.session_state.logged_in:
     login()
 else:
-    main_app()
+    app()
