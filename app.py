@@ -80,7 +80,7 @@ def get_next_due_date(frequency):
         return f"T{next_q} {year}"
     return ""
 
-st.set_page_config(page_title="Suivi Tâches CNC", layout="wide")
+st.set_page_config(page_title="Suivi Tâches Germain", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
