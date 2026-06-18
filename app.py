@@ -46,7 +46,7 @@ def hash_password(pwd):
     return hashlib.sha256(pwd.encode()).hexdigest()
 
 def login_page(users):
-    st.title("🔐 Connexion Suivi Tâches CNC")
+    st.title("🔐 Connexion Suivi Tâches Germain")
     username = st.text_input("Utilisateur")
     password = st.text_input("Mot de passe", type="password")
     if st.button("Se connecter", type="primary"):
