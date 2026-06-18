@@ -98,7 +98,7 @@ if st.sidebar.button("Déconnexion"):
 if "tasks" not in st.session_state:
     st.session_state.tasks = load_tasks()
 
-st.title(f"📋 Suivi Tâches CNC")
+st.title(f"📋 Suivi Tâches Germain")
 
 # Ajout tâche = patron uniquement
 if st.session_state.role == "patron":
