@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
 DEFAULT_USERS = {
-    "personnel": {"password": hashlib.sha256("1234".encode()).hexdigest(), "role": "personnel", "name": "Personnel"},
+    "Germain": {"password": hashlib.sha256("1234".encode()).hexdigest(), "role": "personnel", "name": "Personnel"},
     "patron": {"password": hashlib.sha256("admin".encode()).hexdigest(), "role": "patron", "name": "Patron"}
 }
 
