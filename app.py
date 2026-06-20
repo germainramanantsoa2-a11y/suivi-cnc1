@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
+
 DEFAULT_USERS = {
     "Germain": {"password": hashlib.sha256("1234".encode()).hexdigest(), "role": "personnel", "name": "Germain"},
     "patron": {"password": hashlib.sha256("admin".encode()).hexdigest(), "role": "patron", "name": "Patron"}
@@ -60,18 +61,25 @@ def login_page(users):
             st.error("Utilisateur ou mot de passe incorrect")
 
 def get_status(v_me, v_boss):
-    if v_me and v_boss: return "Validé ✅", "green"
-    elif v_me: return "En attente patron", "orange"
-    elif v_boss: return "En attente personnel", "orange"
+    if v_me and v_boss:
+        return "Validé ✅", "green"
+    elif v_me:
+        return "En attente patron", "orange"
+    elif v_boss:
+        return "En attente personnel", "orange"
     return "À faire", "red"
 
-def get_next_due_date(frequency):
+def get_next_due_period(frequency):
     now = datetime.now()
-    if frequency == "Jour": return (now + timedelta(days=1)).strftime("%d/%m/%Y")
-    elif frequency == "Semaine": return (now + timedelta(weeks=1)).strftime("Semaine %W - %Y")
+    if frequency == "Jour":
+        return (now + timedelta(days=1)).strftime("%d/%m/%Y")
+    elif frequency == "Semaine":
+        return (now + timedelta(weeks=1)).strftime("Semaine %W - %Y")
     elif frequency == "Mois":
-        month = now.month + 1; year = now.year
-        if month > 12: month, year = 1, year + 1
+        month = now.month + 1
+        year = now.year
+        if month > 12:
+            month, year = 1, year + 1
         return datetime(year, month, 1).strftime("%B %Y")
     elif frequency == "Trimestre":
         quarter = (now.month - 1) // 3 + 1
@@ -84,6 +92,7 @@ st.set_page_config(page_title="Suivi Tâches Germain", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+
 users = load_users()
 if not st.session_state.logged_in:
     login_page(users)
@@ -108,15 +117,20 @@ if st.session_state.role == "patron":
             with col1:
                 name = st.text_input("Nom de la tâche *")
                 batch = st.text_input("Lot / Machine", placeholder="Haas VF2, Imprimante Prusa...")
-                frequency = st.selectbox("Fréquence", ["Jour", "Semaine", "Mois", "Trimestre"])
+                frequency = st.selectbox("Fréquence", ["Unique", "Jour", "Semaine", "Mois", "Trimestre"])
             with col2:
                 period = st.text_input("Période actuelle", placeholder="ex: 22/06, Semaine 25, Juin, T2")
                 description = st.text_area("Description", height=80)
 
             if st.form_submit_button("Ajouter la tâche", type="primary") and name:
                 new_task = {
-                    "name": name, "batch": batch, "frequency": frequency, "period": period,
-                    "description": description, "validated_by_me": False, "validated_by_boss": False,
+                    "name": name,
+                    "batch": batch,
+                    "frequency": frequency,
+                    "period": period,
+                    "description": description,
+                    "validated_by_me": False,
+                    "validated_by_boss": False,
                     "created_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "cache_date": datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
@@ -130,8 +144,8 @@ st.divider()
 # Filtres pour tout le monde
 col1, col2, col3 = st.columns([2,2,1])
 with col1:
-    filtre_freq = st.multiselect("Filtrer par fréquence", ["Jour", "Semaine", "Mois", "Trimestre"],
-                                 default=["Jour", "Semaine", "Mois", "Trimestre"])
+    filtre_freq = st.multiselect("Filtrer par fréquence", ["Unique", "Jour", "Semaine", "Mois", "Trimestre"],
+                                 default=["Unique", "Jour", "Semaine", "Mois", "Trimestre"])
 with col2:
     filtre_statut = st.multiselect("Filtrer par statut", ["À faire", "En attente patron", "En attente personnel", "Validé ✅"],
                                    default=["À faire", "En attente patron", "En attente personnel"])
@@ -150,23 +164,28 @@ if tasks_filtrees:
     c2.metric("En attente", overdue)
     c3.metric("Validées", len(tasks_filtrees) - overdue)
 
-# Affichage tâches - CORRIGÉ : visible pour personnel aussi
+# Affichage tâches
 for i, t in enumerate(st.session_state.tasks):
     status, color = get_status(t["validated_by_me"], t["validated_by_boss"])
 
     # Applique les filtres
-    if t["frequency"] not in filtre_freq: continue
-    if status not in filtre_statut: continue
+    if t["frequency"] not in filtre_freq:
+        continue
+    if status not in filtre_statut:
+        continue
 
-    next_due = get_next_due_date(t["frequency"])
     with st.container(border=True):
         col1, col2, col3 = st.columns([3, 2, 1])
+
         with col1:
             st.markdown(f"### {t['name']}")
             batch_info = f" | **Lot:** {t['batch']}" if t.get('batch') else ""
             st.write(f"**{t['frequency']}** - {t['period']}{batch_info}")
-            if t.get('description'): st.caption(t['description'])
-            st.write(f"**Prochaine échéance:** {next_due}")
+            if t.get('description'):
+                st.caption(t['description'])
+
+            if t['frequency']!= "Unique":
+                st.write(f"**Prochaine échéance:** {get_next_due_period(t['frequency'])}")
             st.caption(f"Créée le: {t['created_date']} | MAJ: {t['cache_date']}")
 
         with col2:
@@ -182,10 +201,19 @@ for i, t in enumerate(st.session_state.tasks):
                 st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me{i}", disabled=True)
                 boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss{i}")
                 if boss!= t["validated_by_boss"]:
-                    st.session_state.tasks[i]["validated_by_boss"] = boss
+                    # Si on valide et que c'est récurrent, on reprogramme
+                    if boss and t["frequency"]!= "Unique":
+                        st.session_state.tasks[i]["period"] = get_next_due_period(t["frequency"])
+                        st.session_state.tasks[i]["validated_by_me"] = False # Reset pour la prochaine fois
+                        st.session_state.tasks[i]["validated_by_boss"] = False # Reset aussi
+                        st.success(f"Tâche validée et reprogrammée pour {st.session_state.tasks[i]['period']}")
+                    else:
+                        st.session_state.tasks[i]["validated_by_boss"] = boss
+
                     st.session_state.tasks[i]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                     save_tasks(st.session_state.tasks)
                     st.rerun()
+
             st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {status}</span>", unsafe_allow_html=True)
 
         with col3:
