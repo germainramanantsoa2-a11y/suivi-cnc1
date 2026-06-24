@@ -4,16 +4,27 @@ import os
 import hashlib
 import pandas as pd
 from datetime import datetime, timedelta
+import uuid
 
 TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
 
-DEFAULT_USERS = {
-    "Germain": {"password": hashlib.sha256("1234".encode()).hexdigest(), "role": "personnel", "name": "Germain"},
-    "patron": {"password": hashlib.sha256("admin".encode()).hexdigest(), "role": "patron", "name": "Patron"}
-}
+def hash_password(pwd):
+    return hashlib.sha256(pwd.encode()).hexdigest()
 
 def load_users():
+    # Utilise st.secrets si dispo, sinon valeurs par défaut
+    try:
+        DEFAULT_USERS = {
+            "Germain": {"password": hash_password(st.secrets.passwords.germain), "role": "personnel", "name": "Germain"},
+            "patron": {"password": hash_password(st.secrets.passwords.patron), "role": "patron", "name": "Patron"}
+        }
+    except:
+        DEFAULT_USERS = {
+            "Germain": {"password": hash_password("1234"), "role": "personnel", "name": "Germain"},
+            "patron": {"password": hash_password("admin"), "role": "patron", "name": "Patron"}
+        }
+
     if not os.path.exists(USERS_FILE):
         with open(USERS_FILE, "w", encoding="utf-8") as f:
             json.dump(DEFAULT_USERS, f, indent=2, ensure_ascii=False)
@@ -43,9 +54,6 @@ def save_tasks(tasks):
     with open(TASKS_FILE, "w", encoding="utf-8") as f:
         json.dump(tasks, f, indent=2, ensure_ascii=False)
 
-def hash_password(pwd):
-    return hashlib.sha256(pwd.encode()).hexdigest()
-
 def login_page(users):
     st.title("🔐 Connexion Suivi Tâches Germain")
     username = st.text_input("Utilisateur")
@@ -61,13 +69,10 @@ def login_page(users):
             st.error("Utilisateur ou mot de passe incorrect")
 
 def get_status(v_me, v_boss):
-    if v_me and v_boss:
-        return "Validé ✅", "green"
-    elif v_me:
-        return "En attente patron", "orange"
-    elif v_boss:
-        return "En attente personnel", "orange"
-    return "À faire", "red"
+    if v_me and v_boss: return "Validé ✅", "#28a745"
+    elif v_me: return "En attente patron", "#fd7e14"
+    elif v_boss: return "En attente personnel", "#fd7e14"
+    return "À faire", "#dc3545"
 
 def get_next_due_period(frequency):
     now = datetime.now()
@@ -78,13 +83,12 @@ def get_next_due_period(frequency):
     elif frequency == "Mois":
         month = now.month + 1
         year = now.year
-        if month > 12:
-            month, year = 1, year + 1
+        if month > 12: month, year = 1, year + 1
         return datetime(year, month, 1).strftime("%B %Y")
     elif frequency == "Trimestre":
         quarter = (now.month - 1) // 3 + 1
         next_q = quarter % 4 + 1
-        year = now.year if quarter < 4 else now.year + 1
+        year = now.year if next_q > quarter else now.year + 1
         return f"T{next_q} {year}"
     return ""
 
@@ -94,6 +98,7 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 users = load_users()
+
 if not st.session_state.logged_in:
     login_page(users)
     st.stop()
@@ -121,9 +126,9 @@ if st.session_state.role == "patron":
             with col2:
                 period = st.text_input("Période actuelle", placeholder="ex: 22/06, Semaine 25, Juin, T2")
                 description = st.text_area("Description", height=80)
-
             if st.form_submit_button("Ajouter la tâche", type="primary") and name:
                 new_task = {
+                    "id": str(uuid.uuid4()), # ID unique pour chaque tâche
                     "name": name,
                     "batch": batch,
                     "frequency": frequency,
@@ -131,8 +136,8 @@ if st.session_state.role == "patron":
                     "description": description,
                     "validated_by_me": False,
                     "validated_by_boss": False,
-                    "created_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "cache_date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    "created_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "cache_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
                 st.session_state.tasks.append(new_task)
                 save_tasks(st.session_state.tasks)
@@ -141,14 +146,14 @@ if st.session_state.role == "patron":
 
 st.divider()
 
-# Filtres pour tout le monde
+# Filtres
 col1, col2, col3 = st.columns([2,2,1])
 with col1:
     filtre_freq = st.multiselect("Filtrer par fréquence", ["Unique", "Jour", "Semaine", "Mois", "Trimestre"],
                                  default=["Unique", "Jour", "Semaine", "Mois", "Trimestre"])
 with col2:
     filtre_statut = st.multiselect("Filtrer par statut", ["À faire", "En attente patron", "En attente personnel", "Validé ✅"],
-                                   default=["À faire", "En attente patron", "En attente personnel"])
+                                   default=["À faire", "En attente patron", "En attente personnel", "Validé ✅"])
 with col3:
     if st.button("Exporter CSV") and st.session_state.tasks:
         df = pd.DataFrame(st.session_state.tasks)
@@ -156,69 +161,68 @@ with col3:
         st.download_button("📥 Télécharger", csv, "suivi_taches.csv", "text/csv")
 
 # Stats
-tasks_filtrees = st.session_state.tasks
-if tasks_filtrees:
+if st.session_state.tasks:
+    # Tri par date de création, plus récent en premier
+    st.session_state.tasks.sort(key=lambda x: x['created_date'], reverse=True)
+
+    tasks_filtrees = []
+    for t in st.session_state.tasks:
+        status, _ = get_status(t["validated_by_me"], t["validated_by_boss"])
+        if t["frequency"] in filtre_freq and status in filtre_statut:
+            tasks_filtrees.append(t)
+
     overdue = sum(1 for t in tasks_filtrees if not (t["validated_by_me"] and t["validated_by_boss"]))
     c1, c2, c3 = st.columns(3)
     c1.metric("Total tâches", len(tasks_filtrees))
     c2.metric("En attente", overdue)
     c3.metric("Validées", len(tasks_filtrees) - overdue)
+else:
+    tasks_filtrees = []
 
 # Affichage tâches
-for i, t in enumerate(st.session_state.tasks):
+for i, t in enumerate(tasks_filtrees):
     status, color = get_status(t["validated_by_me"], t["validated_by_boss"])
 
-    # Applique les filtres
-    if t["frequency"] not in filtre_freq:
-        continue
-    if status not in filtre_statut:
-        continue
+    # Container avec bordure colorée
+    st.markdown(f"""<div style='border: 1px solid #ddd; border-left: 5px solid {color}; border-radius: 5px; padding: 10px; margin-bottom: 10px;'>""", unsafe_allow_html=True)
 
-    with st.container(border=True):
-        col1, col2, col3 = st.columns([3, 2, 1])
+    col1, col2, col3 = st.columns([3, 2, 1])
+    with col1:
+        st.markdown(f"### {t['name']}")
+        batch_info = f" | **Lot:** {t['batch']}" if t.get('batch') else ""
+        st.write(f"**{t['frequency']}** - {t['period']}{batch_info}")
+        if t.get('description'):
+            st.caption(t['description'])
+        if t['frequency']!= "Unique":
+            st.write(f"**Prochaine échéance:** {get_next_due_period(t['frequency'])}")
+        st.caption(f"Créée le: {t['created_date']} | MAJ: {t['cache_date']}")
 
-        with col1:
-            st.markdown(f"### {t['name']}")
-            batch_info = f" | **Lot:** {t['batch']}" if t.get('batch') else ""
-            st.write(f"**{t['frequency']}** - {t['period']}{batch_info}")
-            if t.get('description'):
-                st.caption(t['description'])
+    with col2:
+        # ID unique basé sur l'UUID de la tâche = bug fixé
+        task_id = t.get('id', t['created_date'])
 
-            if t['frequency']!= "Unique":
-                st.write(f"**Prochaine échéance:** {get_next_due_period(t['frequency'])}")
-            st.caption(f"Créée le: {t['created_date']} | MAJ: {t['cache_date']}")
-
-        with col2:
-            if st.session_state.role == "personnel":
-                me = st.checkbox("Je valide", value=t["validated_by_me"], key=f"me{i}")
-                st.checkbox("Validé par patron", value=t["validated_by_boss"], key=f"boss{i}", disabled=True)
-                if me!= t["validated_by_me"]:
-                    st.session_state.tasks[i]["validated_by_me"] = me
-                    st.session_state.tasks[i]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    save_tasks(st.session_state.tasks)
-                    st.rerun()
-            else: # patron
-                st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me{i}", disabled=True)
-                boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss{i}")
-                if boss!= t["validated_by_boss"]:
-                    # Si on valide et que c'est récurrent, on reprogramme
-                    if boss and t["frequency"]!= "Unique":
-                        st.session_state.tasks[i]["period"] = get_next_due_period(t["frequency"])
-                        st.session_state.tasks[i]["validated_by_me"] = False # Reset pour la prochaine fois
-                        st.session_state.tasks[i]["validated_by_boss"] = False # Reset aussi
-                        st.success(f"Tâche validée et reprogrammée pour {st.session_state.tasks[i]['period']}")
-                    else:
-                        st.session_state.tasks[i]["validated_by_boss"] = boss
-
-                    st.session_state.tasks[i]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    save_tasks(st.session_state.tasks)
-                    st.rerun()
-
-            st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {status}</span>", unsafe_allow_html=True)
-
-        with col3:
-            if st.session_state.role == "patron":
-                if st.button("🗑️ Supprimer", key=f"del{i}", type="secondary"):
-                    st.session_state.tasks.pop(i)
-                    save_tasks(st.session_state.tasks)
-                    st.rerun()
+        if st.session_state.role == "personnel":
+            me = st.checkbox("Je valide", value=t["validated_by_me"], key=f"me_{task_id}")
+            st.checkbox("Validé par patron", value=t["validated_by_boss"], key=f"boss_{task_id}", disabled=True)
+            if me!= t["validated_by_me"]:
+                # Trouve la vraie tâche dans st.session_state.tasks via l'id
+                for idx, task in enumerate(st.session_state.tasks):
+                    if task.get('id') == t.get('id'):
+                        st.session_state.tasks[idx]["validated_by_me"] = me
+                        st.session_state.tasks[idx]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        break
+                save_tasks(st.session_state.tasks)
+                st.rerun()
+        else: # patron
+            st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me_{task_id}", disabled=True)
+            boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss_{task_id}")
+            if boss!= t["validated_by_boss"]:
+                for idx, task in enumerate(st.session_state.tasks):
+                    if task.get('id') == t.get('id'):
+                        if boss and t["frequency"]!= "Unique":
+                            st.session_state.tasks[idx]["period"] = get_next_due_period(t["frequency"])
+                            st.session_state.tasks[idx]["validated_by_me"] = False
+                            st.session_state.tasks[idx]["validated_by_boss"] = False
+                            new_period = st.session_state.tasks[idx]["period"]
+                        else:
+                            st.session_state.tasks[idx]["validated_by_boss"] = boss
