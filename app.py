@@ -226,3 +226,20 @@ for i, t in enumerate(tasks_filtrees):
                             new_period = st.session_state.tasks[idx]["period"]
                         else:
                             st.session_state.tasks[idx]["validated_by_boss"] = boss
+                        st.session_state.tasks[idx]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        break
+                save_tasks(st.session_state.tasks)
+                if boss and t["frequency"]!= "Unique":
+                    st.success(f"Tâche validée et reprogrammée pour {new_period}")
+                st.rerun()
+
+        st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {status}</span>", unsafe_allow_html=True)
+
+    with col3:
+        if st.session_state.role == "patron":
+            if st.button("🗑️ Supprimer", key=f"del_{task_id}", type="secondary"):
+                st.session_state.tasks = [task for task in st.session_state.tasks if task.get('id')!= t.get('id')]
+                save_tasks(st.session_state.tasks)
+                st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
