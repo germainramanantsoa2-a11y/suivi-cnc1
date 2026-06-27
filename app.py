@@ -214,8 +214,9 @@ for i, t in enumerate(tasks_filtrees):
                 save_tasks(st.session_state.tasks)
                 st.rerun()
         else: # patron
-               st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me_{task_id}", disabled=True)
-    boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss_{task_id}", disabled=not t["validated_by_me"])
+             else: # patron
+    st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me_{task_id}", disabled=True)
+    boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss_{task_id}", disabled=not t["validated_by_me"]) # <- remis dans le else
     if boss!= t["validated_by_boss"]:
         for idx, task in enumerate(st.session_state.tasks):
             if task.get('id') == t.get('id'):
@@ -233,7 +234,7 @@ for i, t in enumerate(tasks_filtrees):
             st.success(f"Tâche validée et reprogrammée pour {new_period}")
         else:
             st.success("Validation enregistrée")
-            st.rerun()
+        st.rerun()
 
         st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {status}</span>", unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)                        
