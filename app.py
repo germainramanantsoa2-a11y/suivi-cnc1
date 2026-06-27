@@ -233,8 +233,7 @@ for i, t in enumerate(tasks_filtrees):
             st.success(f"Tâche validée et reprogrammée pour {new_period}")
         else:
             st.success("Validation enregistrée")
-
-                st.rerun()
+            st.rerun()
 
         st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {status}</span>", unsafe_allow_html=True)
         st.markdown("</div>",unsafe_allow_html=True)                        
