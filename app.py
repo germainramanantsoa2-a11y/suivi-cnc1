@@ -182,30 +182,26 @@ else:
 # Affichage tâches
 for i, t in enumerate(tasks_filtrees):
     status, color = get_status(t["validated_by_me"], t["validated_by_boss"])
-
-    # Container avec bordure colorée
     st.markdown(f"""<div style='border: 1px solid #ddd; border-left: 5px solid {color}; border-radius: 5px; padding: 10px; margin-bottom: 10px;'>""", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([3, 2, 1])
     with col1:
         st.markdown(f"### {t['name']}")
-        batch_info = f" | **Lot:** {t['batch']}" if t.get('batch') else ""
-        st.write(f"**{t['frequency']}** - {t['period']}{batch_info}")
+        batch_info = f" | *Lot:* {t['batch']}" if t.get('batch') else ""
+        st.write(f"*{t['frequency']}* - {t['period']}{batch_info}")
         if t.get('description'):
             st.caption(t['description'])
         if t['frequency']!= "Unique":
-            st.write(f"**Prochaine échéance:** {get_next_due_period(t['frequency'])}")
+            st.write(f"*Prochaine échéance:* {get_next_due_period(t['frequency'])}")
         st.caption(f"Créée le: {t['created_date']} | MAJ: {t['cache_date']}")
 
     with col2:
-        # ID unique basé sur l'UUID de la tâche = bug fixé
         task_id = t.get('id', t['created_date'])
 
         if st.session_state.role == "personnel":
             me = st.checkbox("Je valide", value=t["validated_by_me"], key=f"me_{task_id}")
             st.checkbox("Validé par patron", value=t["validated_by_boss"], key=f"boss_{task_id}", disabled=True)
             if me!= t["validated_by_me"]:
-                # Trouve la vraie tâche dans st.session_state.tasks via l'id
                 for idx, task in enumerate(st.session_state.tasks):
                     if task.get('id') == t.get('id'):
                         st.session_state.tasks[idx]["validated_by_me"] = me
@@ -214,30 +210,28 @@ for i, t in enumerate(tasks_filtrees):
                 save_tasks(st.session_state.tasks)
                 st.rerun()
         else: # patron
-             else: # patron
-    st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me_{task_id}", disabled=True)
-    boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss_{task_id}", disabled=not t["validated_by_me"]) # <- remis dans le else
-    if boss!= t["validated_by_boss"]:
-        for idx, task in enumerate(st.session_state.tasks):
-            if task.get('id') == t.get('id'):
+            st.checkbox("Validé par personnel", value=t["validated_by_me"], key=f"me_{task_id}", disabled=True)
+            boss = st.checkbox("Je valide", value=t["validated_by_boss"], key=f"boss_{task_id}", disabled=not t["validated_by_me"])
+            if boss!= t["validated_by_boss"]:
+                for idx, task in enumerate(st.session_state.tasks):
+                    if task.get('id') == t.get('id'):
+                        if boss and t["frequency"]!= "Unique":
+                            st.session_state.tasks[idx]["period"] = get_next_due_period(t["frequency"])
+                            st.session_state.tasks[idx]["validated_by_me"] = False
+                            st.session_state.tasks[idx]["validated_by_boss"] = False
+                            new_period = st.session_state.tasks[idx]["period"]
+                        else:
+                            st.session_state.tasks[idx]["validated_by_boss"] = boss
+                        st.session_state.tasks[idx]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        break
+                save_tasks(st.session_state.tasks)
                 if boss and t["frequency"]!= "Unique":
-                    st.session_state.tasks[idx]["period"] = get_next_due_period(t["frequency"])
-                    st.session_state.tasks[idx]["validated_by_me"] = False
-                    st.session_state.tasks[idx]["validated_by_boss"] = False
-                    new_period = st.session_state.tasks[idx]["period"]
+                    st.success(f"Tâche validée et reprogrammée pour {new_period}")
                 else:
-                    st.session_state.tasks[idx]["validated_by_boss"] = boss
-                st.session_state.tasks[idx]["cache_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                break
-        save_tasks(st.session_state.tasks)
-        if boss and t["frequency"]!= "Unique":
-            st.success(f"Tâche validée et reprogrammée pour {new_period}")
-        else:
-            st.success("Validation enregistrée")
-        st.rerun()
+                    st.success("Validation enregistrée")
+                st.rerun()
 
         st.markdown(f"<span style='color:{color}; font-weight:bold;'>● {status}</span>", unsafe_allow_html=True)
-        st.markdown("</div>",unsafe_allow_html=True)                        
 
     with col3:
         if st.session_state.role == "patron":
